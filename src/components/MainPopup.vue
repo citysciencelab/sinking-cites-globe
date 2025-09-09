@@ -2,14 +2,16 @@
     import { onMounted, ref, watch, defineProps} from "vue";
     import { useCities } from "@/composables/useCities";
     import { useAudio } from "@/composables/useAudio";
+    import { useMapControls } from "@/composables/useMapControls";
     import { ObserveVisibility } from "vue3-observe-visibility";
+    import ChevronLeft from "vue-material-design-icons/ChevronLeft.vue";
+    import ChevronRight from "vue-material-design-icons/ChevronRight.vue";
 
     // swiper imports
     import { Swiper, SwiperSlide } from "swiper/vue";
     import "swiper/css";
     import "swiper/css/autoplay";
     import { Autoplay } from "swiper/modules";
-
 
     const props = defineProps({
         title: String
@@ -27,8 +29,9 @@
     const city = ref(null);
     const baseUrl = "https://admin.sinkingcities.online";
 
-    const { loadCityData } = useCities();
+    const { cities, loadCityData } = useCities();
     const { setSource } = useAudio();
+    const { selectCity } = useMapControls();
 
     /* const loadCityData = async () => {
     if (!props.title) return;
@@ -48,6 +51,25 @@
     
     function assetUrl(id) {
         return `${baseUrl}/assets/${id}?format=webp&quality=85`;
+    }
+
+    function switchCity(step, currentCity) {
+        const list = cities.value || [];
+        const n = list.length;
+        if (!n) return;
+
+        const idx = currentCity
+            ? list.findIndex(c =>
+                (currentCity.id != null && c.id === currentCity.id) ||
+                (currentCity.title && c.title === currentCity.title)
+            )
+            : -1;
+
+        const base = idx >= 0 ? idx : (step > 0 ? -1 : 0);
+
+        const nextIndex = ((base + step) % n + n) % n;
+
+        selectCity(list[nextIndex]);
     }
 
 
@@ -211,6 +233,17 @@
                 </div>
             </PerfectScrollbar>
             <div class="popup_footer">
+                <div class="index">
+                     {{ (cities.findIndex(c => (c.id && city?.id && c.title === city?.title)) + 1) + " / " + cities.length }}
+                </div>
+                <div class="prev_next_btns">
+                    <div class="prev" @click="switchCity(-1, city)">
+                        <ChevronLeft :size="24"></ChevronLeft>
+                    </div>
+                    <div class="next" @click="switchCity(1, city)">
+                        <ChevronRight :size="24"></ChevronRight>
+                    </div>
+                </div>
                 <h2>{{city.title}}</h2>
                 <div class="wave_img">
                     <img src="images/icons/pink_wave.png"/>
@@ -520,6 +553,28 @@
             bottom:30px;
             right:0;
             z-index:10;
+
+            .prev_next_btns {
+                display:flex;
+                flex-flow:row wrap;
+                justify-content: space-around;
+                margin:0px 10px;
+                color:$color1;
+
+                .prev, .next {
+                    padding:5px;
+                    box-sizing: border-box;
+                    border-radius:5px;
+                    border:1px solid $color1;
+                    margin:3px;
+
+                    &:hover {
+                        cursor:pointer;
+                        background:$color1;
+                        color:$color3;
+                    }
+                }
+            }
 
             .wave_img {
                 flex:0 0 100px;

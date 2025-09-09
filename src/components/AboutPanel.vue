@@ -1,5 +1,5 @@
 <script setup>
-import { ref, defineProps, defineEmits, watch, nextTick } from "vue";
+import { ref, defineProps, defineEmits, watch, nextTick, onMounted } from "vue";
 import { useIntro } from "@/composables/useIntro.js";
 import { useAudio } from "@/composables/useAudio";
 import { useMapControls } from "@/composables/useMapControls";
@@ -17,6 +17,7 @@ const { resetView } = useMapControls();
 
 
 const entering = ref(false);
+const hideLoader = ref(false);
 
 const closeMenu = () => {
     if (props.firstOpen) {
@@ -26,6 +27,12 @@ const closeMenu = () => {
 
     emit("update:open", false);
 }
+
+onMounted(() => {
+    setTimeout(() => {
+        hideLoader.value = true;
+    }, 2000);
+})
 
 watch(
   () => props.open,
@@ -49,6 +56,10 @@ watch(
 </script>
 
 <template>
+    <div v-if="!hideLoader" class="loader">
+        <img src="images/gifs/rotate_load.gif" />
+        <h1>SINKING CITIES</h1>
+    </div>
     <div
         v-if="props.open"
         class="about_menu_wrapper"
@@ -63,13 +74,57 @@ watch(
             <div class="intro_text" v-html="introText.text"></div>
             <div v-if="props.firstOpen" class="start_exp" @click="closeMenu">
                 <div class="border"></div>
-                <div class="link_content">Start The Experience</div>
+                <div class="link_content">
+                    <img src="images/gifs/rotate_blue.gif" />
+                    Start The Experience
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped lang="scss">
+    .loader {
+        position:fixed;
+        top:0;
+        left:0;
+        width:100vw;
+        height:100vh;
+        z-index:15;
+        background:$color3;
+
+        img {
+            position: absolute;
+            top:50%;
+            left:50%;
+            transform:translate(-50%,-50%);
+            width:80px;
+            height:80px;
+        }
+
+        h1 {
+            position: absolute;
+            top: calc(50% + 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: $cairo_base;
+            font-size: 300%;
+            text-transform: uppercase;
+
+            color: transparent;
+            background-image:
+                linear-gradient($color1, $color1),  
+                linear-gradient($color_blue, $color_blue);
+            background-size: 100% 0%, 100% 100%; 
+            background-position: bottom left, bottom left;
+            background-repeat: no-repeat;
+            -webkit-background-clip: text;
+            background-clip: text;
+
+            animation: fill-up 3.6s cubic-bezier(.2,.6,.2,1) forwards;
+        }
+    }
+
     .about_menu_wrapper {
         position:fixed;
         top:0;
@@ -151,15 +206,25 @@ watch(
 
                 .link_content {
                     position: absolute;
-                    top: 1%;
-                    left: 1%;
+                    top: 2px;
+                    left: 2px;
                     display: block;
-                    height: 98%;
-                    width: 98%;
+                    height: calc(100% - 4px);
+                    width: calc(100% - 4px);
                     margin: auto;
                     align-self: center;
                     z-index: 1;
                     background:$color4;
+                    display:flex;
+                    flex-flow:row wrap;
+                    justify-content: center;
+                    align-items:center;
+
+                    img {
+                        flex:0 0 36px;
+                        height:36px;
+                        margin-right:20px;
+                    }
                 }
 
                 &:hover {
@@ -181,7 +246,7 @@ watch(
 
             @media(max-width:1280px) {
                 left:33%; 
-                
+
                 h2 {
                     font-size:280%;
                 }
@@ -199,6 +264,13 @@ watch(
         @keyframes shine {
             to {
             background-position: 200% center;
+            }
+        }
+
+        
+        @keyframes fill-up {
+            to {
+                background-size: 100% 100%, 100% 100%;
             }
         }
     }

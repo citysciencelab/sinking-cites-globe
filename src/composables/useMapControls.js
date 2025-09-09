@@ -8,7 +8,6 @@ export function useMapControls() {
   function selectCity(city) {
     selectedCity.value = city;
 
-    console.log("CITY", city);
     if (city?.coordinates) {
       flyToRequest.value = {
         title: city.title,

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref, watch } from "vue";
+import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import mapboxgl from "mapbox-gl";
 import MainPopup from "./MainPopup.vue";
 import SmallPopup from "./SmallPopup.vue";
@@ -68,7 +68,7 @@ async function loadDirectusCities() {
     lat: r.coordinates.coordinates[1],
     size: 2,
     color: hexToRgba(r.city_color, 0.25) || "rgba(220,120,80,0.25)",
-    iconUrl: `/images/icons/${r.title}_icon.png`,
+    iconUrl: `/images/icons/${r.title.toLowerCase()}_icon.png`,
   }));
 
   return {
@@ -627,8 +627,10 @@ watch(showPopup, (val) => {
   }
 });
 
-watch(flyToRequest, (req) => {
+watch(flyToRequest, async (req) => {
   if (req && map.value) {
+    showPopup.value = false;
+    await nextTick();
     selectedSunkenCity.value = req.title;
     showPopup.value = true;
     autoRotate.value = false;
