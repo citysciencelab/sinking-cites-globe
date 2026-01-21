@@ -66,9 +66,12 @@
                         <img v-if="heritage.image" class="small_title_img" :src="`https://admin.sinkingcities.online/assets/${heritage.image}?width=800`"/>
                 </div>
                 <PerfectScrollbar>
-                    <div class="body">
+                    <div
+                        class="body"
+                        :class="{bottom_space: heritage.link_for_more_information}"
+                    >
                         <h2>{{ heritage?.title }}</h2>
-                        <p v-if="heritage">{{ heritage.text }}</p>
+                        <div v-if="heritage" v-html="heritage.text" class="heritage_content"></div>
                         <p v-else>Lade Daten...</p>
                     </div>
                 </PerfectScrollbar>
@@ -123,6 +126,11 @@
                 }
             }
         }
+        
+
+        @media(max-width:500px) {
+            backdrop-filter: blur(10px);
+        }
     }
 
     .small_popup_content {
@@ -142,8 +150,9 @@
         opacity:0;
         transition:0.3s;
         box-sizing:border-box;
-        overflow-y: auto;
+        overflow: hidden;
         @include dropshadow();
+
 
         .small_popup_wrapper {
             max-height:80vh;
@@ -153,14 +162,12 @@
         .small_header {
             position: relative;
             width:100%;
-            height:300px;
+            height:300px; 
+            max-height: 30vh;
+            overflow:hidden;
 
             @media(max-height:768px) {
                 height:200px;
-
-                .small_title_img {
-                    height:200px;
-                }
             }
 
             &:after {
@@ -197,8 +204,15 @@
 
             .small_title_img {
                 width:100%;
-                height:300px;
+                height:100%;
                 object-fit:cover;
+            }
+
+            @media(max-width:1279px) {
+                .icon_box {
+                    transform: scale(0.75);
+                    transform-origin: top left;
+                }
             }
         }
 
@@ -215,11 +229,21 @@
             @media(max-height:768px) {
                 padding:30px 50px;
             }
+
+            @media(max-width:500px) {
+                padding:10px 20px;
+            }
         }
 
         .body {
             // padding:100px 50px;
-            padding-bottom:100px;
+            &.bottom_space {
+                padding-bottom:100px;
+
+                @media(max-width:1183px) {
+                    padding-bottom:200px;
+                }
+            }
             // overflow:auto;
 
             h2 {
@@ -230,14 +254,82 @@
                 font-size:200%;
                 font-weight:bold;
                 font-family:$cairo-base;
+
+                @media(max-width:1024px) {
+                    font-size:160%;
+                    margin:5px 0px;
+                }
             }
 
-            p {
+            
+            .heritage_content {
                 text-align:left;
                 font-size:130%;
                 font-family:$cairo-base;
                 line-height:130%;
                 color: $pcolor;
+
+                strong {
+                    color:whitesmoke;
+                }
+
+                a {
+                    color:$color_gold;
+                }
+
+                :deep(p) {
+                    text-align:left;
+                    font-size:130%;
+                    font-family:$cairo-base;
+                    line-height:130%;
+                    color: $pcolor;
+                    
+                    strong {
+                        color:whitesmoke;
+                    }
+
+                    @media(max-width:1279px) {
+                        font-size:110%;
+                        line-height:110%;
+                    }
+
+                    @media(max-width:1024px) {
+                        font-size:105%;
+                        line-height:105%;
+                    }
+
+                    @media(max-width:500px) {
+                        font-size:100%;
+                        line-height:100%;
+                    }
+                }
+
+                @media(max-width:1372px) {
+                    :deep(h2) {
+                        font-size:150%;
+                    }
+                }
+
+                
+                @media(max-width:1279px) {
+                    :deep(h2) {
+                        font-size:130%;
+                    }
+                    
+                    font-size:110%;
+                    line-height:110%;
+                }
+
+                
+                @media(max-width:1024px) {
+                    font-size:105%;
+                    line-height:105%;
+                }
+
+                @media(max-width:500px) {
+                    font-size:100%;
+                    line-height:100%;
+                }
             }
         }
 
@@ -263,6 +355,10 @@
                 width:100%;
                 background:linear-gradient(180deg, rgba(5,5,21,0), rgba(5,5,21,0.85));
                 z-index:10;
+
+                @media(max-height:800px) {
+                    height:50px;
+                }
             }
 
             img {
@@ -298,12 +394,44 @@
                     padding:10px 20px;
                 }
             }
+
+            @media(max-width:1024px) {
+                  transform: scale(0.75);
+                transform-origin: bottom right;
+                width: 200%;
+            }
+
+            @media(max-width:500px) {
+                img {
+                    display:none;
+                }
+
+                a {
+                    margin:0px auto;
+                }
+            }
         }
 
         &.enter {
             transform:translateX(-50%) translateY(-50%);
             opacity:1;
             transition:opacity 0.5s linear, transform 0.8s ease;
+        }
+
+        @media(max-width:1180px) {
+            left:auto;
+            right:50px;
+            max-height: calc(100vh - 200px);
+            top: 45%;
+            transform:translateX(0) translateY(-50%) !important;
+        }
+        @media(max-width:500px) {
+            left:2.5%;
+            right:2.5%;
+            width:95%;
+            min-width:0px;
+            max-width:100%;
+            transform:translateY(-50%) !important;
         }
     }
 </style>

@@ -14,24 +14,24 @@ const showHint = ref(false);
 
 let hideTimerId = null;
 
-const { src } = useAudio();
+// fade Info
+const fade_ms = 1500;
+let fadeId = 0;
+let audioToggleTimeout = null;
 
-function toggle() {
+const { src, audioState, userAudioState, setUserAudioState } = useAudio();
+
+function toggleUserAudio() {
   const el = audioRef.value;
   if (!el) return;
 
+  setUserAudioState(!userAudioState.value);
+
   if (isPlaying.value) {
-    el.pause();
-    isPlaying.value = false;
-  } else {
-    el.currentTime = 0;
-    el.volume = 0.7;
-    
-    el.play().then(() => {
-      isPlaying.value = true;
-    }).catch(() => {
-      isPlaying.value = false;
-    });
+    pauseWithFade(fade_ms);
+  }
+  else {
+    playWithFade({ restart: true, target: 0.7, ms: fade_ms });
   }
 }
 
@@ -39,13 +39,19 @@ function fadeVolume(el, target, duration) {
   return new Promise((resolve) => {
     if (!el) return resolve();
 
+    const myId = ++fadeId;
+
     const start = el.volume;
     const delta = target - start;
-    const steps = 50; // Anzahl Intervalle
+    const steps = 50;
     const stepTime = duration / steps;
     let currentStep = 0;
 
     const interval = setInterval(() => {
+      if (myId !== fadeId) {
+        clearInterval(interval);
+        return resolve();
+      }
       currentStep++;
       el.volume = start + (delta * (currentStep / steps));
       if (currentStep >= steps) {
@@ -57,8 +63,35 @@ function fadeVolume(el, target, duration) {
   });
 }
 
+async function playWithFade({ restart = false, target = 0.7, ms = fade_ms } = {}) {
+  const el = audioRef.value;
+  if (!el) return;
+
+  try {
+    if (restart) el.currentTime = 0;
+    el.volume = Math.max(0, Math.min(1, el.volume ?? 0));
+    if (el.paused) await el.play();
+    isPlaying.value = true;
+    await fadeVolume(el, target, ms);
+  } catch {
+    isPlaying.value = false;
+  }
+}
+
+async function pauseWithFade(ms = fade_ms) {
+  const el = audioRef.value;
+  if (!el) return;
+  try {
+    await fadeVolume(el, 0, ms);
+  } finally {
+    el.pause();
+    isPlaying.value = false;
+  }
+}
+
 watch(src, async (newSrc, oldSrc) => {
   const el = audioRef.value;
+
   if (!el || !newSrc || newSrc === oldSrc) return;
 
   if (isPlaying.value) {
@@ -72,10 +105,12 @@ watch(src, async (newSrc, oldSrc) => {
   el.volume = 0; // start leise
 
   try {
-    await el.play();
-    isPlaying.value = true;
-    // fade in new track
-    await fadeVolume(el, 0.7, 8000);
+    if (userAudioState.value) {
+      await el.play();
+      isPlaying.value = true;
+      // fade in new track
+      await fadeVolume(el, 0.7, 8000);
+    }
   } catch {
     isPlaying.value = false;
   }
@@ -97,13 +132,28 @@ watch(isPlaying, (now) => {
     }
   }
 });
+
+watch(audioState, (val) => {
+  if (audioToggleTimeout) {
+    clearTimeout(audioToggleTimeout);
+  }
+
+  audioToggleTimeout = setTimeout(async () => {
+
+    if (val === true && userAudioState.value) {
+      await playWithFade({ restart: false, target: 0.7, ms: fade_ms });
+    } else if (val === false) {
+      await pauseWithFade(fade_ms);
+    }
+  }, 100);
+});
 </script>
 
 <template>
   <div id="audioplayer">
     <button
       type="button"
-      @click="toggle"
+      @click="toggleUserAudio"
       :aria-pressed="isPlaying"
       :style="{ color: ciColor }"
     >
@@ -181,6 +231,20 @@ watch(isPlaying, (now) => {
         transform:translateX(0);
         opacity:1;
         transition:opacity 0.3s ease, transform 0.3s ease;
+      }
+
+      @media(max-width:500px) {
+        margin-left:10px;
+        padding:0px 10px 0px 0px;
+        p {
+          font-size:90%;
+          font-weight:300;
+          margin:0px 0px 0px 5px;
+        }
+
+        span {
+          transform:scale(0.5);
+        }
       }
     }
 }

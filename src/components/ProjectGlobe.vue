@@ -3,9 +3,11 @@ import { onMounted, onBeforeUnmount, ref, watch, nextTick } from "vue";
 import mapboxgl from "mapbox-gl";
 import MainPopup from "./MainPopup.vue";
 import SmallPopup from "./SmallPopup.vue";
+import { usePopupState } from "@/composables/usePopup";
 import { useCities } from "@/composables/useCities";
 import { useMapControls } from "@/composables/useMapControls";
 import { useAudio } from "@/composables/useAudio";
+import { addGeoJsonLayer, removeGeoJsonLayer } from "@/js/geojsonLayer";
 import { directus } from "@/js/directus";
 import { readItems } from "@directus/sdk";
 import { hexToRgba } from "@/js/hexToRGBA";
@@ -15,8 +17,9 @@ import { hexToRgba } from "@/js/hexToRGBA";
 mapboxgl.accessToken = "pk.eyJ1IjoiYTNydGdtIiwiYSI6ImNtZWEydjN0NDA4dG8ybXM1NDRoeGN2cnAifQ.rlqfZJOAztuKNRuopOPmkQ";
 
 // composables
+const { popupActive, togglePopupState } = usePopupState();
 const { cities, fetchCities } = useCities();
-const { flyToRequest, viewUpdater } = useMapControls();
+const { flyToRequest, flyToCityRequest, viewUpdater, addDimLayer, geojsonPayload, shiftMapRequest } = useMapControls();
 const { setSource } = useAudio();
 
 // const mapEl = ref(null);
@@ -27,6 +30,15 @@ const selectedSunkenCity = ref(null);
 const selectedHeritage = ref(null);
 const autoRotate = ref(true);
 const saveMapZoom = ref(3.5);
+
+// helperLayer information:
+const FLYTO_SRC_ID   = "flyto-poi-src";
+const FLYTO_PIN_ID   = "flyto-poi-pin";
+const FLYTO_NAME_ID  = "flyto-poi-name";
+
+//dimLayer
+const DIM_LAYER_ID = "basemap-dim";
+const DIM_SRC_ID = "basemap-dim-src";
 
 /* for test purposes only const currentMapZoom = computed(() => {
   if (map.value) {
@@ -86,25 +98,62 @@ async function loadDirectusCities() {
   };
 }
 
+function getLngLat(record) {
+  if (
+    record.coordinates &&
+    Array.isArray(record.coordinates.coordinates) &&
+    record.coordinates.coordinates.length === 2
+  ) {
+    const [lng, lat] = record.coordinates.coordinates;
+    return { lng, lat };
+  }
+
+  if (typeof record.coordinates_alternative === "string") {
+    const parts = record.coordinates_alternative
+      .split(",")
+      .map(v => Number(v.trim()));
+
+    if (parts.length === 2 && parts.every(n => Number.isFinite(n))) {
+      const [lng, lat] = parts;
+      return { lng, lat };
+    }
+  }
+
+  return null;
+}
+
 /** fetches cultural heritages from directus and normalize to GeoJSON
  * @returns {Promise<GeoJSON.FeatureCollection>}
  */
 async function loadDirectusHeritages() {
   const heritages = await directus.request(
     readItems("cultural_heritages", {
-      fields: ["id", "title", "category", "coordinates"]
+      fields: ["id", "title", "category", "coordinates", "coordinates_alternative"]
     })
   )
 
-  pointData2.value = heritages.map((r) => ({
-    id: r.id,
-    title: r.title,
-    lng: r.coordinates.coordinates[0],
-    lat: r.coordinates.coordinates[1],
-    category: r.category,
-    size: 2,
-    color: hexToRgba(heritageCategoryColor.value[r.category], 1)
-  }));
+  
+
+    console.log(heritages);
+  pointData2.value = heritages.map((r) => {
+    const coords = r?.coordinates?.coordinates
+      ? {
+          lng: r.coordinates.coordinates[0],
+          lat: r.coordinates.coordinates[1]
+        }
+      : getLngLat({ coordinates_alternative: r.coordinates_alternative });
+
+    if (!coords) return null;
+    return {
+      id: r.id,
+      title: r.title,
+      lng: coords.lng,
+      lat: coords.lat,
+      category: r.category,
+      size: 2,
+      color: hexToRgba(heritageCategoryColor.value[r.category], 1)
+    };
+  }).filter(Boolean);
 
   return {
     type: "FeatureCollection",
@@ -114,7 +163,7 @@ async function loadDirectusHeritages() {
         id: p.id,
         title: p.title,
         color: p.color,
-        icon: `${p.category}_icon`,
+        icon: `${p.category?.toLowerCase()}_icon` || "other_icon",
         size: p.size
       },
       geometry: { type: "Point", coordinates: [p.lng, p.lat] }
@@ -138,7 +187,7 @@ async function addCityLayer(m, c) {
     uniqueIcons.map(async (title) => {
       const iconId = `${title}-icon`;
       if (m.hasImage(iconId)) return;
-      const url = `/images/icons/${title}_icon.png`;
+      const url = `/images/icons/${title.toLowerCase()}_icon.png`;
       const img = await loadHtmlImage(url);
       m.addImage(iconId, img, { sdf: false });
     })
@@ -150,7 +199,7 @@ async function addCityLayer(m, c) {
       id: "sinking_cities",
       type: "symbol",
       source: "cities",
-      maxzoom:10.1,
+      maxzoom:9.9,
       layout: {
         "icon-image": ["get", "icon"],
         "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.35, 5, 0.5],
@@ -169,6 +218,7 @@ async function addCityLayer(m, c) {
       id: "city-labels",
       type: "symbol",
       source: "cities",
+      maxzoom:9.9,
       layout: {
         "text-field": ["get", "title"],
         "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
@@ -202,11 +252,14 @@ async function addHeritageLayer (m, h) {
   const heritageIcons = [...new Set(pointData2.value.map((p) => p.category))];
   await Promise.all(
     heritageIcons.map(async (cat) => {
-      const iconId = `${cat}_icon`;
-      if (m.hasImage(iconId)) return;
-      const url = `/images/icons/${cat}_icon.png`;
-      const img = await loadHtmlImage(url);
-      m.addImage(iconId, img, { sdf: false });
+      if (cat) {
+        const iconId = `${cat.toLowerCase()}_icon`;
+
+        if (m.hasImage(iconId)) return;
+        const url = `/images/icons/${cat.toLowerCase()}_icon.png`;
+        const img = await loadHtmlImage(url);
+        m.addImage(iconId, img, { sdf: false });
+      }
     })
   );
 
@@ -221,9 +274,9 @@ async function addHeritageLayer (m, h) {
         "circle-opacity": 1,
         "circle-radius": [
           "interpolate", ["exponential", 2], ["zoom"],
-          2, 3,
-          6, 10,
-          8, 12
+          2, 7,
+          6, 13,
+          8, 15
         ],
         "circle-emissive-strength": 1
       }
@@ -255,6 +308,7 @@ m.on("click", (e) => {
       const title = cityF.properties?.title;
       selectedSunkenCity.value = title;
       showPopup.value = true;
+      togglePopupState(true);
       showSmallPopup.value = false;  
       autoRotate.value = false;
       saveMapZoom.value = m.getZoom();
@@ -266,7 +320,7 @@ m.on("click", (e) => {
 
       m.flyTo({
         center: coords,
-        zoom: 10,
+        zoom: 9.9,
         speed: 0.6,
         curve: 2,
         bearing: m.getBearing(),
@@ -306,6 +360,7 @@ m.on("click", (e) => {
 
     if (showPopup.value) {
       showPopup.value = false;
+      togglePopupState(false);
     }
   });
 }
@@ -464,7 +519,6 @@ function loadHtmlImage(url) {
   });
 }
 
-
 // AUTOROTATE HANDLING
 
 function startAutorotate() {
@@ -502,6 +556,101 @@ function startAutorotate() {
 function stopAutorotate() {
   if (rotateHandle) cancelAnimationFrame(rotateHandle);
   rotateHandle = null;
+}
+
+// HELPER LAYERS (FOR PINS AND NAMES)
+function removeHelperLayer() {
+  if (map.value.getLayer(FLYTO_NAME_ID)) map.value.removeLayer(FLYTO_NAME_ID);
+  if (map.value.getLayer(FLYTO_PIN_ID))  map.value.removeLayer(FLYTO_PIN_ID);
+  if (map.value.getSource(FLYTO_SRC_ID)) map.value.removeSource(FLYTO_SRC_ID);
+}
+
+function addHelperLayer(req) {
+  removeHelperLayer();
+
+  // create mapbox feature
+  const feature = {
+    type: "Feature",
+    properties: { name: req.place_name ?? "" },
+    geometry: { type: "Point", coordinates: [req.lng, req.lat] }
+  };
+
+  // add layer sauce
+  map.value.addSource(FLYTO_SRC_ID, {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [feature] }
+  });
+
+  if (req.pin) {
+    const canUseSprite = !!map.value.getStyle()?.sprite;
+
+    const ICON_ID = "helper-marker";
+    const ICON_PATH = "/images/icons/info_pin_2.png";
+    
+    // add marker if it does not exist yet
+    if (!map.value.hasImage(ICON_ID)) {
+      map.value.loadImage(ICON_PATH, (error, image) => {
+        if (error) {
+          console.error("Error loading marker image:", error);
+        }
+
+        if (!map.value.hasImage(ICON_ID)) {
+          map.value.addImage(ICON_ID, image, { sdf: false });
+        }
+      });
+    }
+
+    // ADD PIN
+    if (canUseSprite) {
+      map.value.addLayer({
+        id: FLYTO_PIN_ID,
+        type: "symbol",
+        source: FLYTO_SRC_ID,
+        layout: {
+          "icon-image": ICON_ID,
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.1, 5, 0.25],
+          "icon-allow-overlap": true,
+          "symbol-z-order": "auto",
+        },
+      });
+    } else {
+      // fallback to circle
+      map.value.addLayer({
+        id: FLYTO_PIN_ID,
+        type: "circle",
+        source: FLYTO_SRC_ID,
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#e74c3c",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2
+        }
+      });
+    }
+  }
+
+  // ADD NAME
+  if (req.place_name) {
+    map.value.addLayer({
+      id: FLYTO_NAME_ID,
+      type: "symbol",
+      source: FLYTO_SRC_ID,
+      layout: {
+        "text-field": ["get", "name"],
+        "text-size": 20,
+        "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+        "text-anchor": "top",
+        "text-offset": [0, 2.2],
+        "text-allow-overlap": true,
+        "text-transform": "uppercase"
+      },
+      paint: {
+        "text-color": "#f5ec84",
+        "text-halo-color": "#00000c",
+        "text-halo-width": 1
+      }
+    });
+  }
 }
 
 onMounted(async () => {
@@ -609,10 +758,82 @@ onMounted(async () => {
   });
 });
 
+/*
+* adds dimLayer
+*/
+function addBasemapDim(mapInstance, opacity = 0.3, beforeId = "sinking_cities") {
+  const worldPoly = {
+    type: "Feature",
+    geometry: {
+      type: "Polygon",
+      coordinates: [[
+        [-180, -85],
+        [180, -85],
+        [180, 85],
+        [-180, 85],
+        [-180, -85]
+      ]]
+    }
+  };
+
+  // Source anlegen
+  if (!mapInstance.getSource(DIM_SRC_ID)) {
+    mapInstance.addSource(DIM_SRC_ID, {
+      type: "geojson",
+      data: worldPoly
+    });
+  }
+
+  // Layer hinzufügen
+  mapInstance.addLayer(
+    {
+      id: DIM_LAYER_ID,
+      type: "fill",
+      source: DIM_SRC_ID,
+      paint: {
+        "fill-color": "#000000",
+        "fill-opacity": opacity,
+        "fill-opacity-transition": { duration: 5000 }
+      }
+    },
+    beforeId // z. B. ID deines ersten eigenen Layers
+  );
+}
+
+/**
+ * removes dimLayer
+ */
+function removeBasemapDim(mapInstance) {
+  if (!mapInstance) return;
+  if (mapInstance.getLayer(DIM_LAYER_ID)) mapInstance.removeLayer(DIM_LAYER_ID);
+  if (mapInstance.getSource(DIM_SRC_ID)) mapInstance.removeSource(DIM_SRC_ID);
+}
+
 onBeforeUnmount(() => {
   stopAutorotate();
   map.value?.remove();
 });
+
+// HELPER FUNCTIONS FOR SHIFT REQUEST
+function computeOffsetForSide(map, side, fy = 0.33) {
+  const w = map.getCanvas().width;
+  const h = map.getCanvas().height;
+  const fx = side === "left" ?  0.33 : 0.66;
+  return [(0.5 - fx) * w, (0.5 - fy) * h]; 
+}
+
+function applyShiftSide(map, { side, fy = 0.33, duration = 700 }) {
+  const offset = computeOffsetForSide(map, side, fy);
+  map.easeTo({
+    center: map.getCenter(),
+    zoom: map.getZoom(),
+    bearing: map.getBearing(),
+    pitch: map.getPitch(),
+    offset,
+    duration,
+    essential: true,
+  });
+}
 
 // popup watcher
 watch(showPopup, (val) => {
@@ -621,23 +842,84 @@ watch(showPopup, (val) => {
     stopAutorotate();
   } else {
     setSource();
+    // remove dim maps
+    removeBasemapDim(map.value);
+    // remove pin layers
+    removeHelperLayer();
+    // remove geojsons
+  
     autoRotate.value = true;
     map.value.flyTo({ center: map.value.getCenter(), zoom: saveMapZoom.value, speed: 0.8});
     startAutorotate();
   }
 });
 
-watch(flyToRequest, async (req) => {
+watch(popupActive, (val) => {
+  showPopup.value = val;
+});
+
+watch(addDimLayer, (val) => {
+  if (val) {
+    addBasemapDim(map.value, 0.5);
+  }
+  else {
+    removeBasemapDim(map.value);
+  }
+});
+
+watch(flyToRequest, async(req) => {
+  if (req && map.value) {
+    map.value.flyTo({
+      center: [req.lng, req.lat],
+      zoom: req.zoom,
+      duration: 1500,
+      curve:1,
+      bearing: map.value.getBearing(),
+      pitch:0
+    })
+
+    const wantsPin  = !!req.pin;
+    const wantsName = !!req.place_name && req.place_name !== "";
+
+    // place pin on map?
+    if (wantsPin || wantsName) {
+      addHelperLayer(req);
+    }
+    else {
+      removeHelperLayer();
+    }
+  }
+});
+
+watch(shiftMapRequest, (req) => {
+  if (!req || !map.value) return;
+
+  // only shift map at horizotal screensizes
+  if (window.innerWidth <= 719) return;
+
+  if (map.value.isMoving()) {
+    const once = () => {
+      map.value.off("moveend", once);
+      applyShiftSide(map.value, req);
+    };
+    map.value.on("moveend", once);
+  } else {
+    applyShiftSide(map.value, req);
+  }
+});
+
+watch(flyToCityRequest, async (req) => {
   if (req && map.value) {
     showPopup.value = false;
+    togglePopupState(false);
     await nextTick();
     selectedSunkenCity.value = req.title;
     showPopup.value = true;
+    togglePopupState(true);
     autoRotate.value = false;
 
     saveMapZoom.value = map.value.getZoom();
 
-    console.log(req, "here");
     map.value.flyTo({
       center: [req.lng, req.lat],
       zoom: req.zoom,
@@ -648,6 +930,17 @@ watch(flyToRequest, async (req) => {
     });
   }
 });
+
+watch(() => geojsonPayload.value, (newValue) => {
+    if (!newValue) {
+      removeGeoJsonLayer(map.value, { sourceId: "story-geojson-source", layerId: "story-geojson-layer" });
+      return;
+    }
+
+    addGeoJsonLayer(map.value, newValue);
+  },
+  { immediate: true }
+);
 
 watch(viewUpdater, (newValue) => {
   if (newValue && map.value) {
@@ -666,7 +959,7 @@ watch(viewUpdater, (newValue) => {
   <div class="comp_wrapper">
     <div  ref="globeEl" id="map" :class="['globe_container', { 'shifted': showPopup }]"></div>
   </div>
-  <MainPopup v-if="showPopup" :title="selectedSunkenCity" @close="showPopup = false" />
+  <MainPopup v-if="showPopup" :title="selectedSunkenCity" @close="showPopup = false; togglePopupState(false)" />
   <SmallPopup v-if="showSmallPopup" :title="selectedHeritage" :narrow="showPopup" @close="showSmallPopup = false" />
   <!--<p id="zoomfortest">{{ currentMapZoom }}</p>-->
 </template>
@@ -690,13 +983,13 @@ watch(viewUpdater, (newValue) => {
       left:0;
       transition:0.5s;
 
-      &.shifted {
+      /*&.shifted {
         width:70vw;
         transform:translateX(-50%);
         transition:0.8s;
         transition-delay:1s;
         overflow:hidden;
-      }
+      }*/
     }
 
     .pointLabel {

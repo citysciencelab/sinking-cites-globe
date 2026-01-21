@@ -1,5 +1,5 @@
 <script setup>
-import { ref, defineProps, defineEmits, watch, nextTick, onMounted } from "vue";
+import { ref, defineProps, defineEmits, computed, watch, nextTick, onMounted } from "vue";
 import { useIntro } from "@/composables/useIntro.js";
 import { useAudio } from "@/composables/useAudio";
 import { useMapControls } from "@/composables/useMapControls";
@@ -18,6 +18,14 @@ const { resetView } = useMapControls();
 
 const entering = ref(false);
 const hideLoader = ref(false);
+
+const introHtml = computed(() => {
+console.log("introtext", introText.value);
+  if (props.firstOpen) {
+    return introText.value.text;
+  }
+  return `${introText.value.text}${introText.value.Long_Text}`;
+});
 
 const closeMenu = () => {
     if (props.firstOpen) {
@@ -71,7 +79,7 @@ watch(
             :class="{ enter: entering }"    
         >
             <h2>{{ introText.title }}</h2>
-            <div class="intro_text" v-html="introText.text"></div>
+            <div class="intro_text" v-html="introHtml"></div>
             <div v-if="props.firstOpen" class="start_exp" @click="closeMenu">
                 <div class="border"></div>
                 <div class="link_content">
@@ -141,10 +149,12 @@ watch(
             left:25%;
             transform:translate(-50%,-50%);
             width:33%;
-            min-width:600px;
+            min-width:min(60vw, 680px);
             max-width:1400px;
+            max-height:95%;
+            overflow:hidden;
             display:flex;
-            flex-flow:row wrap;
+            flex-flow:column wrap;
             justify-content:flex-start;
             
             h2 {
@@ -154,19 +164,36 @@ watch(
                 text-shadow:2px 2px $color4;
                 text-transform: uppercase;
                 text-align:left;
+                flex:1 0 auto;
                 width:100%;
+
+                @media(max-width:720px) {
+                    margin-top:0;
+                }
             }
 
-            .intro_text {
+            :deep(.intro_text) {
                 width:100%;
+                flex:2 0 auto;
                 text-align:left;
                 font-size:120%;
                 font-weight:500;
                 color:$pcolor;
+                max-height:50vh;
+                overflow:auto;
+                padding:30px 50px 30px 30px;
+                margin-right:-50px;
+                background:rgba(0,0,0,0.3);
+                border-radius: 10px;;
+                box-sizing: border-box;
 
                 strong {
-                    color:whitesmoke;
+                    color:$color1 !important;
                     font-weight:700;
+                }
+
+                a {
+                    color:white;
                 }
             }
 
@@ -185,6 +212,7 @@ watch(
                 text-transform: uppercase;
                 font-family: $cairo_base;
                 overflow:hidden;
+                flex:1 0 auto;
                 @include dropshadow();
                     transition:0.3s;
 
@@ -244,7 +272,7 @@ watch(
                 transform: translateY(0);
             }
 
-            @media(max-width:1280px) {
+            @media(max-width:1366px) {
                 left:33%; 
 
                 h2 {
@@ -257,6 +285,26 @@ watch(
 
                 .start_exp {
                     font-size:120%;
+                }
+            }
+
+            @media(max-width:1024px) {
+                left:40%;
+            }
+
+            @media(max-width:500px) {
+                width:90%;
+                left:5%;
+                top:0;
+                transform:translateX(0);
+
+                h2 {
+                    font-size:250%;
+                    margin:20px 0px 10px 0px;
+                }
+                
+                .intro_text {
+                    font-size:100%;
                 }
             }
         }

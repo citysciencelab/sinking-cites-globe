@@ -108,6 +108,7 @@ watch(
 
             .project_card {
                 flex: 0 0 30%;
+                max-height:80vh;
                 border-radius:10px;
                 border:1px solid $color4;
                 overflow:hidden;
@@ -154,6 +155,8 @@ watch(
                     position:relative;
                     padding:0px 30px 20px 30px;
                     box-sizing: border-box;
+                    max-height:calc(100% - 240px);
+                    overflow:auto;
                     z-index:3;
 
                     h3 {
@@ -232,6 +235,7 @@ watch(
                 }
             }
 
+
             @media(max-width:1280px) {
                 width:95%;
 
@@ -239,6 +243,42 @@ watch(
                     flex:0 0 32%;
                 }
             }
+            
+            @media(max-height: 700px) {
+                .project_card {
+                    .card_wrapper {
+                        .img_wrapper {
+                            height:220px;
+                        }
+
+                        .text_block {
+                            h3 {
+                                font-size:120%;
+                            }
+                            p {
+                                font-size:90%;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            @media(max-width:600px) {
+                width:100%;
+                overflow:auto;
+                top:0;
+                left:0;
+                transform:translate(0,0);
+                height:100%;
+                justify-content:center;
+                overflow:auto;
+
+                .project_card {
+                    flex:0 0 90%;
+                    margin:20px 0px;
+                }
+            }
+
 
             &.enter .project_card {
                 opacity: 1;
