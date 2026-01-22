@@ -11,6 +11,7 @@ import { addGeoJsonLayer, removeGeoJsonLayer } from "@/js/geojsonLayer";
 import { directus } from "@/js/directus";
 import { readItems } from "@directus/sdk";
 import { hexToRgba } from "@/js/hexToRGBA";
+import { clearGeojson } from "@/composables/useGeoJson";
 
 
 // set mapbox api key
@@ -19,7 +20,7 @@ mapboxgl.accessToken = "pk.eyJ1IjoiYTNydGdtIiwiYSI6ImNtZWEydjN0NDA4dG8ybXM1NDRoe
 // composables
 const { popupActive, togglePopupState } = usePopupState();
 const { cities, fetchCities } = useCities();
-const { flyToRequest, flyToCityRequest, viewUpdater, addDimLayer, geojsonPayload, shiftMapRequest } = useMapControls();
+const { flyToRequest, flyToCityRequest, viewUpdater, addDimLayer, geojsonPayload, geojsonHeritagePayload, shiftMapRequest } = useMapControls();
 const { setSource } = useAudio();
 
 // const mapEl = ref(null);
@@ -40,13 +41,10 @@ const FLYTO_NAME_ID  = "flyto-poi-name";
 const DIM_LAYER_ID = "basemap-dim";
 const DIM_SRC_ID = "basemap-dim-src";
 
-/* for test purposes only const currentMapZoom = computed(() => {
-  if (map.value) {
-    return map.value.getZoom();
-  }
-
-  return null;
-});*/
+// timer for map resize debounce
+let resizeTimer = null;
+// searchfield debouncer
+let t = null;
 
 let rotateHandle = null;
 
@@ -54,6 +52,12 @@ let rotateHandle = null;
 const pointData = ref([]);
 const pointData2 = ref([]);
 
+// searchField state
+const heritageSearch = ref("");
+const heritagesGeojson = ref(null);
+const heritagesSearchLength = ref(0);
+
+// color settings for heritage pins
 const heritageCategoryColor = ref({
   heritage: "#F59A84",
   sci_resourc: "#84F5CE",
@@ -98,6 +102,9 @@ async function loadDirectusCities() {
   };
 }
 
+/** getLngLat from comma seperated strings of coords
+ * 'lng,lat'
+*/
 function getLngLat(record) {
   if (
     record.coordinates &&
@@ -128,13 +135,10 @@ function getLngLat(record) {
 async function loadDirectusHeritages() {
   const heritages = await directus.request(
     readItems("cultural_heritages", {
-      fields: ["id", "title", "category", "coordinates", "coordinates_alternative"]
+      fields: ["id", "title", "category", "tags", "year", "Source", "coordinates", "coordinates_alternative"]
     })
   )
 
-  
-
-    console.log(heritages);
   pointData2.value = heritages.map((r) => {
     const coords = r?.coordinates?.coordinates
       ? {
@@ -150,25 +154,38 @@ async function loadDirectusHeritages() {
       lng: coords.lng,
       lat: coords.lat,
       category: r.category,
+      tags: r.tags ?? "",
+      year: r.year ?? "", 
+      source: r.Source ?? "",
       size: 2,
       color: hexToRgba(heritageCategoryColor.value[r.category], 1)
     };
   }).filter(Boolean);
 
-  return {
+  const fc = {
     type: "FeatureCollection",
     features: pointData2.value.map((p) => ({
       type: "Feature",
+      id: p.id,
       properties: {
         id: p.id,
         title: p.title,
         color: p.color,
+        category: p.category,
+        tags: p.tags ?? "",
+        year: p.year ?? "", 
+        source: p.source ?? "",
         icon: `${p.category?.toLowerCase()}_icon` || "other_icon",
+        current_icon:`${p.category?.toLowerCase()}_icon` || "other_icon",
+        match_icon: "match_icon",
         size: p.size
       },
       geometry: { type: "Point", coordinates: [p.lng, p.lat] }
     }))
   };
+
+  heritagesGeojson.value = fc;
+  return fc;
 }
 
 /**
@@ -248,6 +265,8 @@ async function addHeritageLayer (m, h) {
     m.addSource("heritages", { type: "geojson", data: h });
   }
 
+  m.addImage("match_icon", await loadHtmlImage("/images/icons/match_icon.png"), { sdf: false });
+
   // preload icon images
   const heritageIcons = [...new Set(pointData2.value.map((p) => p.category))];
   await Promise.all(
@@ -270,7 +289,24 @@ async function addHeritageLayer (m, h) {
       source: "heritages",
       maxzoom:8,
       paint: {
-        "circle-color": ["get", "color"],
+        "circle-color": [
+            "case",
+            ["boolean", ["feature-state", "match"], false],
+            "#50c3ff",          // match color
+            ["get", "color"]    // default
+        ],
+        "circle-stroke-color": [
+          "case",
+          ["boolean", ["feature-state", "match"], false],
+          "#ffffff",
+          "rgba(0,0,0,0)"
+        ],
+         "circle-stroke-width": [
+          "case",
+          ["boolean", ["feature-state", "match"], false],
+          3,
+          0
+        ],
         "circle-opacity": 1,
         "circle-radius": [
           "interpolate", ["exponential", 2], ["zoom"],
@@ -290,7 +326,7 @@ async function addHeritageLayer (m, h) {
       source: "heritages",
       minzoom: 8,
       layout: {
-        "icon-image": ["get", "icon"],
+        "icon-image": ["get", "current_icon"],
         "icon-size": 0.2,
         "icon-allow-overlap": true,
         "symbol-z-order": "auto",
@@ -300,8 +336,10 @@ async function addHeritageLayer (m, h) {
   }
 }
 
+/** clicks on globe for sinkingcities und heritages */
 function addMapClicks (m) {
-m.on("click", (e) => {
+  m.on("click", (e) => {
+    // features from sinkingcities layer
     const [cityF] = m.queryRenderedFeatures(e.point, { layers: ["sinking_cities"] });
 
     if (cityF) {
@@ -313,11 +351,13 @@ m.on("click", (e) => {
       autoRotate.value = false;
       saveMapZoom.value = m.getZoom();
 
+      // get coords of city
       const coords = Array.isArray(cityF.geometry?.coordinates) &&
                      typeof cityF.geometry.coordinates[0] === "number"
         ? cityF.geometry.coordinates
         : [e.lngLat.lng, e.lngLat.lat];
 
+      // fly to city
       m.flyTo({
         center: coords,
         zoom: 9.9,
@@ -329,6 +369,7 @@ m.on("click", (e) => {
       return;
     }
 
+    // features from cultural_heritages_layer
     const [heritF] = m.queryRenderedFeatures(e.point, {
       layers: ["cultural_heritages", "cultural_heritages_icons"]
     });
@@ -346,6 +387,7 @@ m.on("click", (e) => {
           ? heritF.geometry.coordinates
           : [e.lngLat.lng, e.lngLat.lat];
 
+        // fly to heritage
         m.flyTo({
           center: coords,
           zoom: 8,
@@ -379,16 +421,6 @@ function configureAtmosphere(m) {
      'star-intensity': 0.1,
   });
 
-  /* No Fog Rules m.setFog({
-    color: "rgba(255,255,255,0)",   
-    "high-color": "rgba(255,255,255,0)",
-    "space-color": "rgba(0,0,0,0)",  
-    "horizon-blend": 0.0,            
-    range: [1, 1],                    
-    "star-density": 1                  
-  });*/
-
-  //
   if (!m.getLayer("sky")) {
     m.addLayer({
       id: "sky",
@@ -402,7 +434,7 @@ function configureAtmosphere(m) {
   }
 }
 
-// High-perf drifting clouds as Mapbox CanvasSource (no Three.js)
+// drifting clouds as mapbox CanvasSource
 function addCloudsCanvasLayer(m, {
   id = "clouds",
   url = "https://raw.githubusercontent.com/turban/webgl-earth/master/images/fair_clouds_4k.png",
@@ -421,18 +453,18 @@ function addCloudsCanvasLayer(m, {
     [-180, -MAX_LAT]
   ];
 
-  // Canvas
+  // canvas
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d", { alpha: true });
 
-  // Texture
+  // texture
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.src = url;
 
-  // Drift state
+  // drift state
   let u = 0, v = 0;
   let lastT = performance.now();
 
@@ -455,22 +487,22 @@ function addCloudsCanvasLayer(m, {
 
     ctx.clearRect(0, 0, width, height);
 
-    // 1) draw original texture, tiled with drift offsets
+    // draw original texture, tiled with drift offsets
     ctx.globalCompositeOperation = "source-over";
     drawTiled(offU, offV);
 
-    // 2) recolor visible pixels to pure white, preserve alpha
+    // recolor visible pixels to pure white, preserve alpha
     ctx.globalCompositeOperation = "source-in";
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, width, height);
 
-    // 3) reset for next frame
+    // reset for next frame
     ctx.globalCompositeOperation = "source-over";
   }
 
   function tick(tNow) {
     const dt = tNow - lastT;
-    if (dt >= 33) { // ~30 FPS cap
+    if (dt >= 33) { // 33 FPS cap
       drawFrame(dt);
       m.triggerRepaint();
       lastT = tNow;
@@ -488,8 +520,8 @@ function addCloudsCanvasLayer(m, {
         id,
         type: "raster",
         source: id,
-        // Do NOT put "opacity" here; use paint.raster-opacity.
-        // Also avoid maxzoom unless you really want to hide clouds > zX.
+        // Do NOT put "opacity" here; use paint.raster-opacity
+        // Also avoid maxzoom unless you really want to hide clouds
         paint: {
           "raster-opacity": opacity,
           "raster-fade-duration": 0,
@@ -505,7 +537,7 @@ function addCloudsCanvasLayer(m, {
 
 
 /**
- * Promise wrapper to load <img> and return ImageBitmap or HTMLImageElement
+ * promise wrapper to load <img> and return imagebitmap or HTMLImageElement
  * @param {string} url
  * @returns {Promise<HTMLImageElement>}
  */
@@ -520,7 +552,6 @@ function loadHtmlImage(url) {
 }
 
 // AUTOROTATE HANDLING
-
 function startAutorotate() {
   /*stopAutorotate();
   const step = () => {
@@ -553,6 +584,7 @@ function startAutorotate() {
   }
 }
 
+// stop globe autorotating i.e city or heritage click
 function stopAutorotate() {
   if (rotateHandle) cancelAnimationFrame(rotateHandle);
   rotateHandle = null;
@@ -653,6 +685,38 @@ function addHelperLayer(req) {
   }
 }
 
+// init layer for heritage geojsons (quick fix)
+function ensureHeritageHighlight() {
+  map.value.addSource("heritage-highlight", {
+    type: "geojson",
+    data: { type: "FeatureCollection", features: [] }
+  });
+
+  // polygon fill
+  map.value.addLayer({
+    id: "heritage-highlight-fill",
+    type: "fill",
+    source: "heritage-highlight",
+    paint: {
+      "fill-color": "#ffffff",
+      "fill-opacity": 0.18
+    },
+    filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "MultiPolygon"]]
+  });
+
+  // outline
+  map.value.addLayer({
+    id: "heritage-highlight-line",
+    type: "line",
+    source: "heritage-highlight",
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": 2
+    }
+  });
+}
+
+// mounted life cycle hook
 onMounted(async () => {
   // init mapbox
   map.value = new mapboxgl.Map({
@@ -668,6 +732,31 @@ onMounted(async () => {
     antialias: true,
   });
 
+  const onResize = () => {
+  // check that mapbox obj really exists
+  if (!map.value || map.value._removed) {
+    return;
+  }
+
+  // check that map canvas really exists
+  const canvas = map.value.getCanvas?.();
+  if (!canvas) return;
+
+  // trailing debounce: only run after resize stops
+  if (resizeTimer) {
+    clearTimeout(resizeTimer);
+  }
+
+  resizeTimer = setTimeout(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!map.value || map.value._removed) return;
+        map.value.resize();
+      });
+    });
+  }, 250);
+  };
+
   // alter zoom 
   map.value.scrollZoom.setWheelZoomRate(1/200);
 
@@ -676,10 +765,12 @@ onMounted(async () => {
   map.value.touchZoomRotate.disableRotation();
 
   // map interactions
+  // stop autorotate on user interaction
   map.value.on('mousedown', () => {
       autoRotate.value = false;
   });
 
+  // restart autorotate
   map.value.on('mouseup', () => {
       autoRotate.value = true;
       startAutorotate();
@@ -736,11 +827,6 @@ onMounted(async () => {
     await addCityLayer(map.value, sinkingCities);
     await addMapClicks(map.value);
 
-    // sky lights
-    /*if (!map.value.getLayer("three-beams")) {
-      map.value.addLayer(createBeamsCustomLayer());
-    }*/
-
     // start autorotate of the globe
     startAutorotate();
   });
@@ -756,6 +842,12 @@ onMounted(async () => {
       map.value.getCanvas().style.cursor = "";
     });
   });
+
+  // resizes mapbox map/canvas on window resize
+  map.value.once("load", () => {
+    window.addEventListener("resize", onResize, { passive: true });
+    ensureHeritageHighlight();
+  })
 });
 
 /*
@@ -776,7 +868,7 @@ function addBasemapDim(mapInstance, opacity = 0.3, beforeId = "sinking_cities") 
     }
   };
 
-  // Source anlegen
+  // src
   if (!mapInstance.getSource(DIM_SRC_ID)) {
     mapInstance.addSource(DIM_SRC_ID, {
       type: "geojson",
@@ -784,7 +876,7 @@ function addBasemapDim(mapInstance, opacity = 0.3, beforeId = "sinking_cities") 
     });
   }
 
-  // Layer hinzufügen
+  // add layer
   mapInstance.addLayer(
     {
       id: DIM_LAYER_ID,
@@ -796,7 +888,7 @@ function addBasemapDim(mapInstance, opacity = 0.3, beforeId = "sinking_cities") 
         "fill-opacity-transition": { duration: 5000 }
       }
     },
-    beforeId // z. B. ID deines ersten eigenen Layers
+    beforeId // id where to inject layer in zIndex
   );
 }
 
@@ -835,6 +927,60 @@ function applyShiftSide(map, { side, fy = 0.33, duration = 700 }) {
   });
 }
 
+/**
+ * Updates match highlight for cultural heritages.
+ * @param {mapboxgl.Map} m
+ * @param {string} q
+ */
+function updateHeritageSearchHighlight(q) {
+  const query = String(q ?? "").toLowerCase().trim();
+  const fc = heritagesGeojson.value;
+
+  if (!map.value || !map.value.getSource?.("heritages") || !fc) return;
+
+  let matchCount = 0;
+
+  for (const p of pointData2.value) {
+    map.value.setFeatureState({ source: "heritages", id: String(p.id) }, { match: false });
+  }
+
+  for (const f of fc.features) {
+    const props = f.properties || {};
+    const hay = `${props.title ?? ""} ${props.category ?? ""} ${props.tags ?? ""} ${props.year ?? ""}`
+      .toLowerCase();
+
+    const isMatch = query ? hay.includes(query) : false;
+
+    if (isMatch) {
+      // eslint-disable-next-line
+      matchCount += 1;
+    }
+
+    // feature-state for point-layer
+    map.value.setFeatureState(
+      { source: "heritages", id: String(props.id ?? f.id) },
+      { match: isMatch }
+    );
+
+    // icon switching via data
+    props.icon_current = isMatch
+      ? (props.match_icon || props.icon)
+      : props.icon;
+  }
+
+  map.value.getSource("heritages").setData(fc);
+  heritagesSearchLength.value = query ? matchCount : 0;
+}
+
+// searchfield watcher
+watch(heritageSearch, (v) => {
+  if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      if (!map.value) return;
+      updateHeritageSearchHighlight(v);
+  }, 120);
+});
+
 // popup watcher
 watch(showPopup, (val) => {
   if (val) {
@@ -858,6 +1004,7 @@ watch(popupActive, (val) => {
   showPopup.value = val;
 });
 
+// dimlayer watcher set in state by data story step components
 watch(addDimLayer, (val) => {
   if (val) {
     addBasemapDim(map.value, 0.5);
@@ -891,6 +1038,7 @@ watch(flyToRequest, async(req) => {
   }
 });
 
+// shift map to left or right on certain story steps
 watch(shiftMapRequest, (req) => {
   if (!req || !map.value) return;
 
@@ -908,6 +1056,7 @@ watch(shiftMapRequest, (req) => {
   }
 });
 
+// fly to city on outside req (menu click)
 watch(flyToCityRequest, async (req) => {
   if (req && map.value) {
     showPopup.value = false;
@@ -942,6 +1091,19 @@ watch(() => geojsonPayload.value, (newValue) => {
   { immediate: true }
 );
 
+watch(() => showSmallPopup.value, (newValue) => {
+  if (newValue) {
+    console.log(geojsonHeritagePayload.value);
+    if (geojsonHeritagePayload.value) {
+      console.log("i rec this");
+      map.value.getSource("heritage-highlight").setData(geojsonHeritagePayload.value);
+    }
+  }
+  else {
+    clearGeojson();
+  }
+})
+
 watch(viewUpdater, (newValue) => {
   if (newValue && map.value) {
     map.value.flyTo({
@@ -956,6 +1118,22 @@ watch(viewUpdater, (newValue) => {
 </script>
 
 <template>
+  <div class="search_wrapper">
+      <div v-if="heritagesSearchLength" class="hits">
+        {{ heritagesSearchLength}} hits are <span>highlighted</span> on the map!
+      </div>
+      <img class="search_icon" src="/images/icons/search_icon.png">
+      <input
+        v-model="heritageSearch"
+        id="heritage_search"
+        class="heritage-search"
+        type="search"
+        placeholder="Search tags, category, year..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <!--<div v-if="heritagesSearchLength" class="hits">({{ heritagesSearchLength }})</div>-->
+  </div>
   <div class="comp_wrapper">
     <div  ref="globeEl" id="map" :class="['globe_container', { 'shifted': showPopup }]"></div>
   </div>
@@ -966,12 +1144,66 @@ watch(viewUpdater, (newValue) => {
 
 <style lang="scss" scoped>
 
-    #zoomfortest {
-      position:absolute;
-      bottom:0;
-      left:0;
-      color:yellow;
+  #zoomfortest {
+    position:absolute;
+    bottom:0;
+    left:0;
+    color:yellow;
+  }
+
+  .search_wrapper {
+    position:fixed;
+    bottom:90px;
+    left:80px;
+    width:310px;
+    display: flex;
+    flex-flow:row wrap;
+    justify-content:flex-start;
+    align-items: center;
+    z-index:1;
+
+    .search_icon {
+      width:auto;
+      height:25px;
+      position: absolute;
+      top:50%;
+      transform: translateY(-50%);
+      left:0px;
+      z-index:3;
     }
+
+    #heritage_search {
+      background:rgba(0,0,0,0.65);
+      backdrop-filter: blur(3px);
+      color:#f5ec84;
+      padding:0px 10px 0px 60px;
+      box-sizing: border-box;
+      border-radius:5px;
+      width:310px;
+      border:1px solid black;
+      outline:none;
+      height:50px;
+      line-height:50px;
+      border-radius: 10px;
+      font-size: 100%;
+
+      &:focus {
+        border:1px solid #f5ec84;
+      }
+    }
+
+    .hits {
+      position:absolute;
+      top:-25px;
+      color:#f5ec84;
+      left:0px;
+
+      span {
+        font-weight:500;
+        color:#50c3ff;
+      }
+    }
+  }
   .comp_wrapper {
     #map {
       display: block;

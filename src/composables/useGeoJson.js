@@ -42,13 +42,46 @@ export async function loadGeojson(stepId, assetId) {
   }
 }
 
+export async function loadHeritageGeojson (assetId) {
+  const { setGeojsonHeritagePayload } = useMapControls();
+
+  const prev = controllers.get(assetId);
+  if (prev) prev.abort();
+
+  if (!assetId) {
+    setGeojsonHeritagePayload(null);
+    return;
+  }
+  
+  const controller = new AbortController();
+  controllers.set(assetId, controller);
+  
+  try {
+      const res = await fetch(assetUrl(assetId), { signal: controller.signal });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      setGeojsonHeritagePayload({
+        data
+      });
+    }
+    catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("[GeoJSON] Fetch failed:", err);
+        setGeojsonHeritagePayload(null);
+      }
+    }
+}
+
 // clears the GeoJSON layer for a given step and aborts any running fetch.
 export function clearGeojson(stepId) {
-  const { setGeojsonPayload } = useMapControls();
+  const { setGeojsonPayload, setGeojsonHeritagePayload } = useMapControls();
 
   const ctl = controllers.get(stepId);
   if (ctl) ctl.abort();
 
   controllers.delete(stepId);
   setGeojsonPayload(null);
+  setGeojsonHeritagePayload(null);
 }

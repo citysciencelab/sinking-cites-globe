@@ -2,6 +2,7 @@
     import { onMounted, ref, watch, defineProps } from "vue";
     import { directus } from "@/js/directus";
     import { readItems } from "@directus/sdk";
+    import { loadHeritageGeojson } from "@/composables/useGeoJson";
 
     const props = defineProps({
         title: String,
@@ -30,6 +31,11 @@
             limit: 1
         }));
         heritage.value = result[0];
+
+        if (heritage.value.geojson) {
+            console.log("this happens", heritage.value.geojson)
+            loadHeritageGeojson(heritage.value.geojson);
+        }
     };
 
     onMounted(() => {
@@ -62,6 +68,19 @@
                 <div class="small_header" :class="{small: !heritage.image}">
                         <div class="icon_box">
                             <img class="icon_left" :src="`images/icons/${heritage.category}_icon_2.png`" />
+                        </div>
+                        <div class="tags_year">
+                            <div v-if="heritage.tags" class="tags">
+                                <li
+                                    v-for="(tag, index) in heritage.tags?.split(',')"
+                                    :key="index"
+                                >
+                                    {{ tag.trim() }}
+                                </li>
+                            </div>
+                            <div v-if="heritage.year" class="year">
+                                <span><img src="/images/icons/year.png"></span>{{  heritage.year }}
+                            </div>
                         </div>
                         <img v-if="heritage.image" class="small_title_img" :src="`https://admin.sinkingcities.online/assets/${heritage.image}?width=800`"/>
                 </div>
@@ -199,6 +218,50 @@
                 .icon_left {
                     width:80px;
                     height:auto;
+                }
+            }
+
+            .tags_year {
+                position:absolute;
+                right: 10px;
+                top: 10px;
+                display:flex;
+                flex-flow:row wrap;
+
+                .tags {
+                    list-style: none;
+                    display: flex;
+                    flex-flow:row wrap;
+                    justify-content: flex-start;                    
+                    
+                    li {
+                        background: rgba(0, 0, 0, 0.65);
+                        padding: 5px 10px;
+                        font-size: 90%;
+                        color:$color1;
+                        margin: 0px 3px;
+                        backdrop-filter: blur(3px);
+                        border-radius: 5px;
+                    }
+                }
+
+                .year {
+                    display:flex;
+                    flex-flow:row wrap;
+                    align-items: center;
+                    background:rgba($color_blue,0.75);
+                    backdrop-filter: blur(3px);
+                    padding:3px;
+                    font-size: 90%;
+                    color:$color1;
+                    border:1px solid $color1;
+                    border-radius:5px 10px;
+                    margin:0px 3px;
+
+                    img {
+                        width:20px;
+                        height:20px;
+                    }
                 }
             }
 
