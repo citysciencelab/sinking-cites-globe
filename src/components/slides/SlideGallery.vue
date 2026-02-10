@@ -185,7 +185,13 @@ onBeforeUnmount(() => {
                     padding:10px;
                     border-radius:10px;
                     color:$color1;
+                    line-height: 150%;
                     font-family:$cairo_base;
+
+                    @media(max-width:1024px) {
+                        font-size: 85%;
+                        line-height: 100%;
+                    }
                 }
             }
         }

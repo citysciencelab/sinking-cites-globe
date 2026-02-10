@@ -11,6 +11,7 @@ const addDimLayer = ref(false);
 
 // if user added geojson
 const geojsonPayload = ref(null);
+const geojsonHeritagePayload = ref(null);
 
 export function useMapControls() {
   function selectCity(city) {
@@ -47,6 +48,10 @@ export function useMapControls() {
   function setGeojsonPayload(payload) {
     geojsonPayload.value = payload;
   }
+  
+  function setGeojsonHeritagePayload(payload) {
+    geojsonPayload.value = payload;
+  }
 
   function requestMapShift(side) {
     if (side !== "left" && side !== "right") {
@@ -73,7 +78,9 @@ export function useMapControls() {
     toggleDimLayer,
     resetView,
     geojsonPayload,
+    geojsonHeritagePayload,
     setGeojsonPayload,
+    setGeojsonHeritagePayload,
     shiftMapRequest,
     requestMapShift
   };
