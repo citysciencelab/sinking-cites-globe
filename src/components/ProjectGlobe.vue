@@ -171,12 +171,13 @@ async function loadDirectusHeritages() {
         title: p.title,
         color: p.color,
         icon: "new_icon",
+        current_icon: "new_icon",
         category: p.category,
         tags: p.tags ?? "",
         year: p.year ?? "", 
         source: p.source ?? "",
         // icon: `${p.category?.toLowerCase()}_icon` || "other_icon",
-        current_icon:`${p.category?.toLowerCase()}_icon` || "other_icon",
+        // current_icon:`${p.category?.toLowerCase()}_icon` || "other_icon",
         match_icon: "match_icon",
         size: p.size
       },
@@ -985,6 +986,24 @@ watch(heritageSearch, (v) => {
 
 // popup watcher
 watch(showPopup, (val) => {
+  const m = map.value;
+  if (!m) return;
+
+  const layersToToggle = [
+    "cultural_heritages",
+    "cultural_heritages_icons"
+  ];
+
+  layersToToggle.forEach((id) => {
+    if (m.getLayer(id)) {
+      m.setLayoutProperty(
+        id,
+        "visibility",
+        val ? "none" : "visible"
+      );
+    }
+  });
+
   if (val) {
     autoRotate.value = false;
     stopAutorotate();
@@ -1120,7 +1139,7 @@ watch(viewUpdater, (newValue) => {
 </script>
 
 <template>
-  <div class="search_wrapper">
+  <div v-if="!showPopup" class="search_wrapper">
       <div v-if="heritagesSearchLength" class="hits">
         {{ heritagesSearchLength}} hits are <span>highlighted</span> on the map!
       </div>
