@@ -178,7 +178,7 @@ watch(
                 text-align:left;
                 font-size:120%;
                 font-weight:500;
-                color:$pcolor;
+                color:$pcolor2;
                 max-height:50vh;
                 overflow:auto;
                 padding:30px 50px 30px 30px;
@@ -188,8 +188,9 @@ watch(
                 box-sizing: border-box;
 
                 strong {
-                    color:$color1 !important;
+                    // color:$color1 !important;
                     font-weight:700;
+                    $color:$pcolor2;
                 }
 
                 a {

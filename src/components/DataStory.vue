@@ -373,7 +373,7 @@ watch(() => props.cityData?.id,
 
                 h3 {
                   color:$color3;
-                  text-shadow:2px 2px darkgoldenrod;
+                  text-shadow:2px 2px $color_gold;
                   font-family:$cairo-base;
                   text-align: center;
                   text-transform:uppercase;
@@ -462,7 +462,7 @@ watch(() => props.cityData?.id,
                   button.start_story {
                     outline:none;
                     border:none;
-                    background:rgba(184, 134, 11,0.95);
+                    background:rgba($color_gold,0.95);
                     backdrop-filter: blur(3px);
                     color:$color3;
                     font-family:$cairo-base;

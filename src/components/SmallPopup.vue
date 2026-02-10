@@ -12,9 +12,9 @@
     const linkHover = ref(false);
     
     const heritageCategoryColor = ref({
-        heritage: "#F59A84",
-        sci_resourc: "#84F5CE",
-        other: "#A284F5"
+        heritage: "#ff5100",
+        sci_resourc: "#ff5100",
+        other: "#ff5100"
     })
 
     // eslint-disable-next-line

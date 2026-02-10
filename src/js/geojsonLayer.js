@@ -6,7 +6,7 @@ const styles = {
     type: "circle",
     paint: {
       "circle-radius": 6,
-      "circle-color": "#00ffff",
+      "circle-color": "#0008B9",
       "circle-opacity": 0.9,
     },
     layout: {},
@@ -14,7 +14,7 @@ const styles = {
   line: {
     type: "line",
     paint: {
-      "line-color": "#00ffff",
+      "line-color": "#0008B9",
       "line-width": 2,
       "line-opacity": 0.9,
     },
@@ -23,7 +23,7 @@ const styles = {
   fill: {
     type: "fill",
     paint: {
-      "fill-color": "#00ffff",
+      "fill-color": "#0008B9",
       "fill-opacity": 0.25,
     },
     layout: {},
@@ -31,7 +31,7 @@ const styles = {
   outline: {
     type: "line",
     paint: {
-      "line-color": "#00ffff",
+      "line-color": "#0008B9",
       "line-width": 2,
       "line-opacity": 0.9,
     },

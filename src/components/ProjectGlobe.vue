@@ -54,11 +54,11 @@ let rotateHandle = null;
 const pointData = ref([]);
 const pointData2 = ref([]);
 
-const heritageCategoryColor = ref({
+/* const heritageCategoryColor = ref({
   heritage: "#F59A84",
   sci_resourc: "#84F5CE",
   other: "#A284F5"
-})
+})*/
 
 /**
  * fetches cities from directus and normalize to GeoJSON
@@ -151,7 +151,8 @@ async function loadDirectusHeritages() {
       lat: coords.lat,
       category: r.category,
       size: 2,
-      color: hexToRgba(heritageCategoryColor.value[r.category], 1)
+      // color: hexToRgba(heritageCategoryColor.value[r.category], 1)
+      color: hexToRgba("#ff5100", 1)
     };
   }).filter(Boolean);
 
@@ -163,7 +164,7 @@ async function loadDirectusHeritages() {
         id: p.id,
         title: p.title,
         color: p.color,
-        icon: `${p.category?.toLowerCase()}_icon` || "other_icon",
+        icon: "new_icon",
         size: p.size
       },
       geometry: { type: "Point", coordinates: [p.lng, p.lat] }
@@ -253,10 +254,12 @@ async function addHeritageLayer (m, h) {
   await Promise.all(
     heritageIcons.map(async (cat) => {
       if (cat) {
-        const iconId = `${cat.toLowerCase()}_icon`;
+        // const iconId = `${cat.toLowerCase()}_icon`;
+        const iconId = "new_icon";
 
         if (m.hasImage(iconId)) return;
-        const url = `/images/icons/${cat.toLowerCase()}_icon.png`;
+        //const url = `/images/icons/${cat.toLowerCase()}_icon.png`;
+        const url = `/images/icons/new_icon.png`;
         const img = await loadHtmlImage(url);
         m.addImage(iconId, img, { sdf: false });
       }
@@ -585,7 +588,7 @@ function addHelperLayer(req) {
     const canUseSprite = !!map.value.getStyle()?.sprite;
 
     const ICON_ID = "helper-marker";
-    const ICON_PATH = "/images/icons/info_pin_2.png";
+    const ICON_PATH = "/images/icons/new_icon.png";
     
     // add marker if it does not exist yet
     if (!map.value.hasImage(ICON_ID)) {
