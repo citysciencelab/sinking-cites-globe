@@ -12,6 +12,7 @@ import { directus } from "@/js/directus";
 import { readItems } from "@directus/sdk";
 import { hexToRgba } from "@/js/hexToRGBA";
 import { clearGeojson } from "@/composables/useGeoJson";
+import fairCloudsUrl from "@/assets/fair_clouds_4k.png";
 
 
 // set mapbox api key
@@ -206,8 +207,7 @@ async function addCityLayer(m, c) {
       const iconId = `${title}-icon`;
       if (m.hasImage(iconId)) return;
       const url = `/images/icons/${title.toLowerCase()}_icon.png`;
-      const img = await loadHtmlImage(url);
-      m.addImage(iconId, img, { sdf: false });
+      await addImageFromUrl(m, iconId, url);
     })
   );
 
@@ -266,7 +266,7 @@ async function addHeritageLayer (m, h) {
     m.addSource("heritages", { type: "geojson", data: h });
   }
 
-  m.addImage("match_icon", await loadHtmlImage("/images/icons/match_icon.png"), { sdf: false });
+  await addImageFromUrl(m, "match_icon", "/images/icons/match_icon.png");
 
   // preload icon images
   const heritageIcons = [...new Set(pointData2.value.map((p) => p.category))];
@@ -279,8 +279,7 @@ async function addHeritageLayer (m, h) {
         if (m.hasImage(iconId)) return;
         //const url = `/images/icons/${cat.toLowerCase()}_icon.png`;
         const url = `/images/icons/new_icon.png`;
-        const img = await loadHtmlImage(url);
-        m.addImage(iconId, img, { sdf: false });
+        await addImageFromUrl(m, iconId, url);
       }
     })
   );
@@ -440,7 +439,7 @@ function configureAtmosphere(m) {
 // drifting clouds as mapbox CanvasSource
 function addCloudsCanvasLayer(m, {
   id = "clouds",
-  url = "https://raw.githubusercontent.com/turban/webgl-earth/master/images/fair_clouds_4k.png",
+  url = fairCloudsUrl,
   beforeId,
   opacity = 0.3,
   width = 2048,
@@ -549,9 +548,29 @@ function loadHtmlImage(url) {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
     img.src = url;
   });
+}
+
+async function addImageFromUrl(m, imageId, url, fallbackUrl = "/images/icons/other_icon.png") {
+  if (m.hasImage(imageId)) return;
+
+  try {
+    const img = await loadHtmlImage(url);
+    m.addImage(imageId, img, { sdf: false });
+  } catch (err) {
+    console.warn(`Failed to load image ${imageId} from ${url}`, err);
+
+    if (!fallbackUrl || fallbackUrl === url) return;
+
+    try {
+      const fallbackImage = await loadHtmlImage(fallbackUrl);
+      m.addImage(imageId, fallbackImage, { sdf: false });
+    } catch (fallbackErr) {
+      console.warn(`Failed to load fallback image ${fallbackUrl} for ${imageId}`, fallbackErr);
+    }
+  }
 }
 
 // AUTOROTATE HANDLING
