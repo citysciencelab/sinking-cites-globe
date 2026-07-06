@@ -82,7 +82,7 @@
                                 <span><img src="/images/icons/year.png"></span>{{  heritage.year }}
                             </div>
                         </div>
-                        <img v-if="heritage.image" class="small_title_img" :src="`https://admin.sinkingcities.online/assets/${heritage.image}?width=800`"/>
+                        <img v-if="heritage.image" class="small_title_img" :src="`https://sinkingcitiesadmin.citysciencelab.hamburg/assets/${heritage.image}?width=800`"/>
                 </div>
                 <PerfectScrollbar>
                     <div

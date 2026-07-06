@@ -27,7 +27,7 @@
 
     const cityPopup = ref(null);
     const city = ref(null);
-    const baseUrl = "https://admin.sinkingcities.online";
+    const baseUrl = "https://sinkingcitiesadmin.citysciencelab.hamburg";
 
     const { cities, loadCityData } = useCities();
     const { setSource } = useAudio();
@@ -90,7 +90,7 @@
 
              console.log("city data", val);
             if (val.audio_1) {
-                const audioSrc = "https://admin.sinkingcities.online/assets/" + val.audio_1;
+                const audioSrc = "https://sinkingcitiesadmin.citysciencelab.hamburg/assets/" + val.audio_1;
                 setSource(audioSrc);
             }
 
@@ -118,7 +118,7 @@
                         <template v-else>
                            <img
                                 class="title_img"
-                                :src="`https://admin.sinkingcities.online/assets/${city.title_img}`"
+                                :src="`https://sinkingcitiesadmin.citysciencelab.hamburg/assets/${city.title_img}`"
                             />
                         </template>
                     </div>

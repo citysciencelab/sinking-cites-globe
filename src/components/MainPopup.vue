@@ -21,7 +21,7 @@
 
     const cityPopup = ref(null);
     const city = ref(null);
-    // const baseUrl = "https://admin.sinkingcities.online";
+    // const baseUrl = "https://sinkingcitiesadmin.citysciencelab.hamburg";
 
     const { cities, loadCityData } = useCities();
     const { selectCity } = useMapControls();
@@ -78,7 +78,7 @@
              cityPopup.value?.classList.remove("enter");
 
             /* AUDIO CONTROL VIA SLIDE NOW if (val.audio_1) {
-                const audioSrc = "https://admin.sinkingcities.online/assets/" + val.audio_1;
+                const audioSrc = "https://sinkingcitiesadmin.citysciencelab.hamburg/assets/" + val.audio_1;
                 setSource(audioSrc);
             }*/
 

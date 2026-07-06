@@ -150,7 +150,7 @@ function onSlideChange(swiper) {
 
   // toggle Audio
   if (step.play_audio_file) {
-    setSource("https://admin.sinkingcities.online/assets/" + step.play_audio_file);
+    setSource("https://sinkingcitiesadmin.citysciencelab.hamburg/assets/" + step.play_audio_file);
   }
 
   // Include_Coordinate?

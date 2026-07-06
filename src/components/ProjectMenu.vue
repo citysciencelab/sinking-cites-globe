@@ -70,7 +70,7 @@ watch(
                     <div class="img_wrapper">
                         <img
                             class="city_title_img"
-                            :src="`https://admin.sinkingcities.online/assets/${city.title_img}?width=500`"
+                            :src="`https://sinkingcitiesadmin.citysciencelab.hamburg/assets/${city.title_img}?width=500`"
                         />
                     </div>
                     <div class="text_block">
